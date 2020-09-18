@@ -329,6 +329,62 @@ class SPDFile:
                         assert("possibly broken file/reader");
                 if SPDFile.match("Track", row[0]):
                     self.track = SPDFile.atof( row[1] );
+                    
+    def get_stop_surface_index( self ):
+        """
+        finds the surface index of the stop.
+        
+        The index is counted from the first surface to the stop. The first
+        surface that is represented is given the index 1. This is to enable
+        the addition of an object plane which is not explicitly represented
+        in the list of lenses and their surfaces in the current code.
+
+        Returns
+        -------
+        int - the surface index, starting to count from 1 with the first surface 
+              of the optical system (i.e. excluding the object plane); 0 is 
+              returned if no stop is defined in the system
+               
+
+        """
+    
+        stop_index = 0; 
+        index = 1;
+        
+        for lens in self.lenses:
+            for surf in lens.surfs:
+                if surf.name == 'Stop':
+                    stop_index = index
+                index += 1
+                    
+        return stop_index
+    
+# ============== I don't have access to the ref index at this point! ==========
+# ============ this is ill-defined, because no wavelength is known ============        
+# ============= (and there is no glass catalog at this point) =================
+#     def get_opl_on_axis( self ):
+#         """
+#         Returns the optical path length along the optical axis of the system.
+#         This function is mainly intended for validation.
+# 
+# 
+#         Returns
+#         -------
+#         float - OPL along the optical axis from the object plane to the image 
+#                 plane
+# 
+#         """
+#     
+#         #assumes object space medium=air (n=1)
+#         #this is the first segment up to the first system surface
+#         opl_on_axis = -self.obj_dist;
+#     
+#         for lens in self.lenses:
+#             #a gap follows a surf
+#             for i, space in enumerate( lens.spaces ):
+#                 opl_on_axis += space.thick 
+#         
+# =============================================================================
     
     def pp_obj( self ) -> float:
         """
@@ -344,7 +400,7 @@ class SPDFile:
     
     def pp_img( self ) -> float:
         """
-        position image-side principal plan
+        position image-side principal plane
 
         Returns
         -------
@@ -831,13 +887,15 @@ class ParaxialSystem:
         outstr += "   - principal plane img                          : {:0.4f} mm".format( self.pp_img ) + os.linesep;
         outstr += "   - rear focus                                   : {:0.4f} mm".format( self.rear_focus() ) + os.linesep;
         outstr += os.linesep;
-        outstr += "------------------------------------" + os.linesep;
-        outstr += "---------- system notes ------------" + os.linesep;
-        outstr += "------------------------------------" + os.linesep;
         
-        for i in self.notes:
-            outstr += i + os.linesep;
-        
+        if self.notes:
+            outstr += "------------------------------------" + os.linesep;
+            outstr += "---------- system notes ------------" + os.linesep;
+            outstr += "------------------------------------" + os.linesep;
+            
+            for i in self.notes:
+                outstr += i + os.linesep;
+            
         
         return outstr;
     
@@ -856,6 +914,19 @@ class SPDParser(BaseLogger):
         self.psys = ParaxialSystem.create( filename );
     
     
+    def get_stop_surface_index(self):
+        """
+        returns the surface index of the stop position, the 
+        first surface in the optical system is counted as 1
+        to allow for an object plane at index 0.
+
+        Returns
+        -------
+        int - index of surface containing the stop
+
+        """
+        
+        return self.psys.spd.get_stop_surface_index();
         
     def create_optical_system(self, matdict=None, options=None ):
 
@@ -881,17 +952,21 @@ class SPDParser(BaseLogger):
                     med=1.0; #013;
                 else:
                     if l.spaces[j].medium.lower() == 'n-bk7':
+                        #matdict = gcat.get_material_dict('glass','SCHOTT-N','N-BK7');
+                        print('modifying N-BK7 to N-BK7 (SCHOTT)')
                         med = 'N-BK7 (SCHOTT)';
-                        #med = 1.52;
-                    if l.spaces[j].medium.lower() == 'f5': #F5 finds CDGM F5 - the proper material is this: gcat.get_material_dict('glass','SCHOTT-F','F5')
-                        matdict = gcat.get_material_dict('glass','SCHOTT-F','F5');
-                        
-                        med = matdict;
-                    #    med = 1.65;
-                        
-                    else:
-                        med = l.spaces[j].medium;
-                    
+                    else:                            
+                        if l.spaces[j].medium.lower() == 'f5': #F5 finds CDGM F5 - the proper material is this: gcat.get_material_dict('glass','SCHOTT-F','F5')
+                            print('modifying F5 to F5 (SCHOTT)')
+                            matdict = gcat.get_material_dict('glass','SCHOTT-F','F5');
+                            
+                            med = matdict;
+                        #    med = 1.65;
+                            
+                        else:
+                            med = l.spaces[j].medium;
+                print(med)
+                
                 optdict = {};
                 if s.is_stop:
                     print('stop');

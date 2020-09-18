@@ -138,16 +138,47 @@ class RayBundleAnalysis(BaseLogger):
 
     def get_arc_length(self, first=0, last=None):
         """
-        Calculates arc length for all rays.
+        Calculates the geometrical arc length for all rays in the RayBundle.
+
+        * TODO: document first and last (what are these doing ?)
 
         :return Arc length (1d numpy array of float)
         """
+        
         last_no = 0 if last is None else last
         delta_s = np.sqrt(np.sum(
             (self.raybundle.x[first + 1:last] -
              self.raybundle.x[first:-1 + last_no])**2,
             axis=1))  # arc element lengths for every ray
         return np.sum(delta_s, axis=0)
+
+    def get_optical_path_length(self, first=0, last=None):
+        """
+        calculates the optical path length of the ray segment
+        if the RayBundle is of the "segment type" (first dim of self.x=2), 
+        if it is of the "position type" (first dim of self.x=1), a warning
+        is provided and zero returned.
+        
+        Parameters
+        ----------
+        first - routed to get_arc_length(), default: 0
+        last  - routed to get_arc_length(), default: None
+        
+        :return OPL (1d numpy array of float)
+        """
+        
+        nrays = self.raybundle.x.shape[2];
+        
+        #is it a 'position type' RayBundle ?
+        if self.raybundle.x.shape[0] == 1:
+            print("RayBundle::get_optical_path_length() -- the method has been called on a 'position type' RayBundle, this is meaningless, returning 0.")
+            return np.zeros( nrays )
+        
+        #else: -  we have a segment, the OPL is obtained by scaling the geometrical length with the index of the medium that the segment is running in
+        #      - this information is obtained as the length of the Pointing vector self.k at the start of the segment
+        refindex = np.sqrt(np.sum(np.abs(self.raybundle.k[0,:,:])**2.0, axis=0))
+        
+        return self.get_arc_length() * refindex
 
     def get_phase_difference(self, first=0, last=None):
         """
@@ -175,14 +206,52 @@ class RayPathAnalysis(BaseLogger):
 
     def get_arc_length(self, first=0, last=None):
         """
-        Get arc lengths of all raybundles in a raypath.
+        Get geometrical arc lengths of all raybundles in a raypath.
+        
+        This is not to be confused with the optical path length (OPL) 
+        that is often required.
         """
+    
+        #the number of rays is the last dimension in the RayBundle.x variable
+        #two cases:
+        #  * the RayBundle is of a "position type", then the first two dimensions are [1,3,N]
+        #  * the RayBundle is of a "ray segment type", then the first two dimensions are [2,3,N]
         (_, _, num_rays) = self.raypath.raybundles[0].x.shape
+        
+        #initialize empty array
         all_arc_len = np.zeros((num_rays,))
+        
+        #raypath.raybundles is a list of RayBundles (which typically describe a ray segment)
+        #- we go trough all ray segments and sum their geometric length
+        #- the individual geometric length is obtained from the corresponding RayBundle method
         for raybundle in self.raypath.raybundles[first:last]:
             all_arc_len += RayBundleAnalysis(raybundle).get_arc_length()
 
         return all_arc_len
+    
+    
+    def get_optical_path_length(self, first=0, last=None):
+        """
+        Get the optical path lengths of all raybundles in a raypath.
+        """
+    
+        #the number of rays is the last dimension in the RayBundle.x variable
+        #two cases:
+        #  * the RayBundle is of a "position type", then the first two dimensions are [1,3,N]
+        #  * the RayBundle is of a "ray segment type", then the first two dimensions are [2,3,N]
+        (_, _, num_rays) = self.raypath.raybundles[0].x.shape
+        
+        #initialize empty array
+        opl = np.zeros((num_rays,))
+        
+        #raypath.raybundles is a list of RayBundles (which typically describe a ray segment)
+        #- we go trough all ray segments and sum their geometric length
+        #- the individual geometric length is obtained from the corresponding RayBundle method
+        for raybundle in self.raypath.raybundles[first:last]:
+            opl += RayBundleAnalysis(raybundle).get_optical_path_length()
+
+        return opl
+    
 
     def get_phase_difference(self, first=0, last=None):
         """

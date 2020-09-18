@@ -204,9 +204,15 @@ class RayPath(object):
 
     def __init__(self, initialraybundle=None):
         if initialraybundle is None:
+            #default param
             self.raybundles = []
         else:
-            self.raybundles = [initialraybundle]
+            if type(initialraybundle) is list:
+                #a list of RayBundles - this may be useful to truncate RayPathes from longer ones
+                self.raybundles = initialraybundle
+            else:
+                #assumes a RayBundle
+                self.raybundles = [initialraybundle]
 
     def appendRayBundle(self, raybundle):
         self.raybundles.append(raybundle)
